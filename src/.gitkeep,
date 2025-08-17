@@ -1,0 +1,140 @@
+This will:
+
+Connect to your MySQL DB (smartexam)
+
+Insert students & rooms
+
+Generate a simple seating plan
+
+📌 DBConnection.java
+import java.sql.Connection;
+import java.sql.DriverManager;
+
+public class DBConnection {
+    private static final String URL = "jdbc:mysql://localhost:3306/smartexam";
+    private static final String USER = "root";   // Change if needed
+    private static final String PASS = "";       // Add password if set
+
+    public static Connection getConnection() {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            return DriverManager.getConnection(URL, USER, PASS);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+}
+
+📌 Student.java
+public class Student {
+    private int id;
+    private String name;
+    private String rollNo;
+    private String subject;
+
+    public Student(String name, String rollNo, String subject) {
+        this.name = name;
+        this.rollNo = rollNo;
+        this.subject = subject;
+    }
+
+    public String getName() { return name; }
+    public String getRollNo() { return rollNo; }
+    public String getSubject() { return subject; }
+}
+
+📌 Room.java
+public class Room {
+    private int id;
+    private String roomName;
+    private int capacity;
+
+    public Room(String roomName, int capacity) {
+        this.roomName = roomName;
+        this.capacity = capacity;
+    }
+
+    public String getRoomName() { return roomName; }
+    public int getCapacity() { return capacity; }
+}
+
+📌 SeatingPlan.java
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+
+public class SeatingPlan {
+
+    public void generatePlan() {
+        try (Connection conn = DBConnection.getConnection()) {
+            if (conn == null) {
+                System.out.println("DB Connection failed!");
+                return;
+            }
+
+            // Get students
+            PreparedStatement ps1 = conn.prepareStatement("SELECT * FROM students");
+            ResultSet rs1 = ps1.executeQuery();
+
+            // Get rooms
+            PreparedStatement ps2 = conn.prepareStatement("SELECT * FROM rooms");
+            ResultSet rs2 = ps2.executeQuery();
+
+            if (!rs2.next()) {
+                System.out.println("No rooms found!");
+                return;
+            }
+
+            String currentRoom = rs2.getString("room_name");
+            int capacity = rs2.getInt("capacity");
+            int seatNo = 1;
+
+            while (rs1.next()) {
+                String studentName = rs1.getString("name");
+                String rollNo = rs1.getString("roll_no");
+
+                System.out.println("Student: " + studentName + " (" + rollNo + ") → " +
+                                   currentRoom + " - Seat " + seatNo);
+
+                // Insert into seating_plan table
+                PreparedStatement psInsert = conn.prepareStatement(
+                    "INSERT INTO seating_plan (student_id, room_id, seat_no, exam_date) VALUES (?, ?, ?, CURDATE())"
+                );
+                psInsert.setInt(1, rs1.getInt("student_id"));
+                psInsert.setInt(2, rs2.getInt("room_id"));
+                psInsert.setInt(3, seatNo);
+                psInsert.executeUpdate();
+
+                seatNo++;
+                if (seatNo > capacity && rs2.next()) {
+                    currentRoom = rs2.getString("room_name");
+                    capacity = rs2.getInt("capacity");
+                    seatNo = 1;
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+📌 Main.java
+public class Main {
+    public static void main(String[] args) {
+        SeatingPlan plan = new SeatingPlan();
+        plan.generatePlan();
+    }
+}
+
+
+✅ How it works:
+
+Connects to MySQL DB (smartexam).
+
+Reads students & rooms.
+
+Assigns students sequentially to rooms until capacity is full.
+
+Prints seating + saves it in seating_plan table.
